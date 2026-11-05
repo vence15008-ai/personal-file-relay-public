@@ -1,5 +1,7 @@
+// Modified for Personal File Relay: handle protected API session loss (2026-11-05).
 import i18n from "@/i18n";
-import { state } from "@/store";
+import { getters, state } from "@/store";
+import { sessionExpired } from "@/utils/auth";
 
 const defaultRequestTimeoutMs = 5000;
 
@@ -48,6 +50,17 @@ export async function fetchURL(url, opts, _auth = true) {
   if (res.status < 200 || res.status > 299) {
     const error = new Error(await res.text());
     error.status = res.status;
+    if (res.status === 401 && _auth && getters.isLoggedIn?.()) {
+      const requested = new URL(url, window.location.href);
+      const protectedApi = requested.origin === window.location.origin &&
+        /\/api\//.test(requested.pathname) &&
+        !/\/public\/api\//.test(requested.pathname) &&
+        !/\/api\/auth(?:\/|$)/.test(requested.pathname);
+      if (protectedApi) {
+        error.sessionExpired = true;
+        sessionExpired();
+      }
+    }
     throw error;
   }
 

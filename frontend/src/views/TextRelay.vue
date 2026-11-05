@@ -49,6 +49,12 @@ const charCount = (text) => Array.from(text).length;
 const firstLine = (text) => text.split(/\r?\n/).find(line => line.trim())?.slice(0, 100) || '空白消息';
 function formatTime(time) { return time ? new Date(time).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '时间未知'; }
 function formatSize(size) { return size < 1048576 ? `${(size / 1024).toFixed(1)} KB` : `${(size / 1048576).toFixed(1)} MB`; }
+function relayFailure(failure, fallback) {
+  if (failure?.status === 401) {
+    items.value = []; cache.clear(); window.clearInterval(timer);
+    error.value = '登录已失效，正在返回登录页，请重新登录后再上传。';
+  } else error.value = fallback;
+}
 async function ensureDirectory() {
   if (await listDirectoryEntries(source, directory)) return;
   try { await post(source, directory, '', false, undefined, {}, true); }
@@ -71,7 +77,7 @@ async function refresh() {
       items.value = [...(root.items || []).filter(item => item.name !== '.text-relay').map(item => ({ ...item, path: item.path || '/' + item.name, kind: 'file', time: Date.parse(item.modified) || 0 })), ...names.map(name => ({ name, path: directory + name, text: cache.get(name), kind: 'message', time: Number(name.slice(0, 13)) }))].sort((a, b) => b.time - a.time || a.name.localeCompare(b.name));
       error.value = '';
     }
-  } catch { if (active) error.value = '无法加载内容，请检查网络或重新登录。'; }
+  } catch (failure) { if (active) relayFailure(failure, '无法加载内容，请检查网络或重新登录。'); }
   finally { if (active) loading.value = false; }
 }
 async function sendOrPaste() {
@@ -95,7 +101,7 @@ async function sendOrPaste() {
     if (draft.value === text) draft.value = '';
     notice.value = '已发送'; error.value = '';
     await refresh();
-  } catch { error.value = '发送失败，文字已保留；点击「重试发送」。'; }
+  } catch (failure) { relayFailure(failure, '发送失败，文字已保留；点击「重试发送」。'); }
   finally { sending.value = false; }
 }
 async function copyText(text) {
@@ -114,7 +120,7 @@ async function queueUploads(files) {
     mutations.replaceRequest(await fetchFiles(source, '/'));
     mutations.showPrompt({ name: 'upload', props: { targetPath: '/', targetSource: source, initialItems: files } });
     error.value = ''; return true;
-  } catch { error.value = '无法打开上传，请检查网络。'; return false; }
+  } catch (failure) { relayFailure(failure, '无法打开上传，请检查网络。'); return false; }
 }
 function hasFiles(event) { return Array.from(event.dataTransfer?.types || []).includes('Files'); }
 function dragEnter(event) { if (!hasFiles(event)) return; event.preventDefault(); event.stopPropagation(); dragDepth++; dragging.value = true; }

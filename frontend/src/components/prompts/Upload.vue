@@ -1,4 +1,4 @@
-<!-- Modified for Personal File Relay on 2026-11-05: clipboard/drop upload queue and compact completion flow. -->
+<!-- Modified for Personal File Relay: compact uploads and safe session-expiry cleanup (2026-11-05). -->
 <template>
   <div class="card-content">
     <p v-if="!minimalRelay" style="text-align: center">{{ uploadSettingsDescription }}</p>
@@ -224,8 +224,8 @@ export default {
       return state.shareInfo;
     },
     uploadSettingsDescription() {
-      const maxConcurrentUpload = state.user.fileLoading?.maxConcurrentUpload;
-      const uploadChunkSizeMb = state.user.fileLoading?.uploadChunkSizeMb;
+      const maxConcurrentUpload = state.user?.fileLoading?.maxConcurrentUpload;
+      const uploadChunkSizeMb = state.user?.fileLoading?.uploadChunkSizeMb;
       if (uploadChunkSizeMb === 0) {
         return this.$t("prompts.uploadSettingsNoChunk", { maxConcurrentUpload });
       }
@@ -248,9 +248,9 @@ export default {
     let wakeLock = null;
 
     // Upload settings
-    const maxConcurrentUpload = ref(state.user.fileLoading?.maxConcurrentUpload);
-    const uploadChunkSizeMb = ref(state.user.fileLoading?.uploadChunkSizeMb);
-    const clearAll = ref(state.user.fileLoading?.clearAll || false);
+    const maxConcurrentUpload = ref(state.user?.fileLoading?.maxConcurrentUpload);
+    const uploadChunkSizeMb = ref(state.user?.fileLoading?.uploadChunkSizeMb);
+    const clearAll = ref(state.user?.fileLoading?.clearAll || false);
 
     const updateUploadSettings = async () => {
       try {
@@ -381,7 +381,7 @@ export default {
     );
 
     const hasClearable = computed(() => {
-      if (state.user.fileLoading?.clearAll) {
+      if (state.user?.fileLoading?.clearAll) {
         // For "clear all" mode: check for completed, error, conflict, or paused uploads
         return files.value.some((file) => 
           file.status === "completed" || 

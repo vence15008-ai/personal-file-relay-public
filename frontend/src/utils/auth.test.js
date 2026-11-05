@@ -1,3 +1,4 @@
+// Modified for Personal File Relay: mobile resume and renewal regression tests (2026-11-05).
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Hoisted mocks referenced by the vi.mock factories below.
@@ -216,5 +217,74 @@ describe('session JWT keep-alive', () => {
     await vi.advanceTimersByTimeAsync(60_000);
     expect(global.fetch.mock.calls.length).toBeGreaterThanOrEqual(2);
     stopSessionKeepAlive();
+  });
+});
+
+describe('mobile session recovery', () => {
+  const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
+  beforeEach(async () => {
+    stopSessionKeepAlive();
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    storeMock.getters.isLoggedIn.mockReturnValue(true);
+    storeMock.getters.isShare.mockReturnValue(false);
+    vi.stubGlobal('location', { pathname: '/chat', search: '?compact=1', href: 'https://relay.example.test/chat?compact=1' });
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    respond(200, makeJwt(Math.floor(Date.now() / 1000) + 7200));
+    await renew();
+    vi.clearAllMocks();
+  });
+  afterEach(() => {
+    stopSessionKeepAlive();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+  it('redirects to login with the relay return path when renewal has no session cookie', async () => {
+    respond(401, 'no token present in request');
+    await expect(renew()).rejects.toMatchObject({ status: 401 });
+    expect(storeMock.mutations.setCurrentUser).toHaveBeenCalledWith(null);
+    expect(window.location.href).toBe('/login?redirect=%2Fchat%3Fcompact%3D1');
+  });
+  it('checks on foreground even when the remembered expiry still looks fresh', async () => {
+    startSessionKeepAlive();
+    respond(401, 'no token present in request');
+    document.dispatchEvent(new Event('visibilitychange'));
+    await flush();
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(storeMock.mutations.setCurrentUser).toHaveBeenCalledWith(null);
+  });
+  it('checks a restored page and keeps a valid session', async () => {
+    startSessionKeepAlive();
+    respond(200, makeJwt(Math.floor(Date.now() / 1000) + 7200));
+    const restored = new Event('pageshow');
+    Object.defineProperty(restored, 'persisted', { value: true });
+    window.dispatchEvent(restored);
+    await flush();
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(storeMock.mutations.setCurrentUser).not.toHaveBeenCalledWith(null);
+  });
+  it('does not log out for a temporary server or network error', async () => {
+    startSessionKeepAlive();
+    respond(500, 'temporary outage');
+    document.dispatchEvent(new Event('visibilitychange'));
+    await flush();
+    expect(storeMock.mutations.setCurrentUser).not.toHaveBeenCalledWith(null);
+    global.fetch = vi.fn().mockRejectedValue(new TypeError('offline'));
+    document.dispatchEvent(new Event('visibilitychange'));
+    await flush();
+    expect(storeMock.mutations.setCurrentUser).not.toHaveBeenCalledWith(null);
+    expect(window.location.href).toBe('https://relay.example.test/chat?compact=1');
+  });
+  it('removes resume listeners when keep-alive is stopped', async () => {
+    startSessionKeepAlive();
+    stopSessionKeepAlive();
+    respond(401, 'no token');
+    document.dispatchEvent(new Event('visibilitychange'));
+    const restored = new Event('pageshow');
+    Object.defineProperty(restored, 'persisted', { value: true });
+    window.dispatchEvent(restored);
+    await flush();
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

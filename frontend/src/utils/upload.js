@@ -1,3 +1,4 @@
+// Modified for Personal File Relay: stop protected queue work after session loss (2026-11-05).
 import { reactive } from "vue";
 import { resourcesApi } from "@/api";
 import { mutations, state } from "@/store";
@@ -426,6 +427,7 @@ class UploadManager {
   }
 
   async processQueue() {
+    if (!getters.isShare() && !state.user) return;
     if (this.isPausedForConflict) {
       return;
     }
@@ -434,7 +436,7 @@ class UploadManager {
       return;
     }
 
-    const maxConcurrent = state.user.fileLoading?.maxConcurrentUpload || 3;
+    const maxConcurrent = state.user?.fileLoading?.maxConcurrentUpload || 3;
     while (
       this.activeUploads < maxConcurrent &&
       this.hasPending()
@@ -513,7 +515,7 @@ class UploadManager {
     upload.status = "uploading";
 
     // Default to 5 MB when unset; explicit 0 disables chunking (single-shot upload).
-    const chunkSizeMb = state.user.fileLoading?.uploadChunkSizeMb ?? 5;
+    const chunkSizeMb = state.user?.fileLoading?.uploadChunkSizeMb ?? 5;
     const chunkSize = chunkSizeMb * 1024 * 1024;
 
     // Single-shot upload when chunking is disabled or file is smaller than chunk size.
@@ -649,7 +651,7 @@ class UploadManager {
   }
 
   chunkSizeBytes() {
-    const chunkSizeMb = state.user.fileLoading?.uploadChunkSizeMb ?? 5;
+    const chunkSizeMb = state.user?.fileLoading?.uploadChunkSizeMb ?? 5;
     return chunkSizeMb * 1024 * 1024;
   }
 
@@ -820,7 +822,7 @@ class UploadManager {
         this.queue.splice(i, 1);
         hadCompleted = true;
       }
-      if (state.user.fileLoading?.clearAll) {
+      if (state.user?.fileLoading?.clearAll) {
         if (status === "error" || status === "conflict" || status === "paused") {
           if (status === "paused") {
             this.abortUpload(upload);

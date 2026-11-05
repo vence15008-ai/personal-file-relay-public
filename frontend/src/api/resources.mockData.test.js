@@ -1,3 +1,4 @@
+// Modified for Personal File Relay: directory authorization regression tests (2026-11-05).
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 const { fetchURLMock, stateMock } = vi.hoisted(() => ({
@@ -36,7 +37,18 @@ vi.mock("./utils", async (importOriginal) => {
   };
 });
 
-import { fetchFiles } from "@/api/resources";
+import { fetchFiles, listDirectoryEntries } from "@/api/resources";
+
+describe('directory probe authentication', () => {
+  it('propagates 401 instead of treating a protected directory as absent', async () => {
+    fetchURLMock.mockRejectedValueOnce(Object.assign(new Error('no token'), { status: 401 }));
+    await expect(listDirectoryEntries('Personal', '/.text-relay/')).rejects.toMatchObject({ status: 401 });
+  });
+  it('retains the missing-directory behavior for 404', async () => {
+    fetchURLMock.mockRejectedValueOnce(Object.assign(new Error('missing'), { status: 404 }));
+    expect(await listDirectoryEntries('Personal', '/.text-relay/')).toBeNull();
+  });
+});
 
 function mockListingResponse(numDirs, numFiles) {
   return {

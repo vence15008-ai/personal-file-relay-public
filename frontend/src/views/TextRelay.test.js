@@ -26,6 +26,16 @@ beforeEach(()=>{
 afterEach(()=>{app.unmount();root.remove();vi.restoreAllMocks();});
 const paste=()=>[...root.querySelectorAll('.compact-actions button')].find(b=>/粘贴|重试/.test(b.textContent)).click();
 describe('minimal relay',()=>{
+ it('does not create a folder or upload after authentication is lost, and clears stale items',async()=>{
+  await flush();expect(root.querySelector('.message-text')).not.toBeNull();
+  mocks.api.fetchFiles.mockRejectedValue(Object.assign(new Error('no token'),{status:401}));
+  const image = new File(['synthetic image'],'resume.png',{type:'image/png'});
+  const event=new Event('drop',{bubbles:true,cancelable:true});Object.defineProperty(event,'dataTransfer',{value:{types:['Files'],files:[image],items:[]}});
+  root.querySelector('.relay').dispatchEvent(event);await flush();
+  expect(mocks.mutations.showPrompt).not.toHaveBeenCalled();
+  expect(mocks.api.post).not.toHaveBeenCalled();expect(root.querySelector('.message-text')).toBeNull();
+  expect(root.textContent).toContain('登录已失效');
+ });
  it('has no composer on ordinary web, renders safe first lines and copies metadata hotzone',async()=>{
   await flush();expect(root.querySelector('form')).toBeNull();expect(root.querySelector('textarea')).toBeNull();
   const hot=root.querySelector('.message-text');expect(hot.textContent).toContain('已有消息 <b>纯文本</b>');expect(hot.querySelector('b')).toBeNull();expect(hot.textContent).not.toContain('第二行');

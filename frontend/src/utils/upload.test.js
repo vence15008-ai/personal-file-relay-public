@@ -1,3 +1,4 @@
+// Modified for Personal File Relay: queue cleanup after authentication loss (2026-11-05).
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/api", () => ({
@@ -398,6 +399,16 @@ describe("conflicts on loose files", () => {
 });
 
 describe("hasOngoingUploads", () => {
+  it("does not start protected uploads after the logged-in user is cleared", async () => {
+    const originalUser = state.user;
+    try {
+      addUpload("pending");
+      state.user = null;
+      await expect(uploadManager.processQueue()).resolves.toBeUndefined();
+      expect(resourcesApi.post).not.toHaveBeenCalled();
+      expect(uploadManager.queue[0].status).toBe("pending");
+    } finally { state.user = originalUser; }
+  });
   it("treats paused uploads as in progress", () => {
     addUpload("paused");
     uploadManager.activeUploads = 0;

@@ -1,4 +1,9 @@
-import { describe, expect, it, vi } from 'vitest';
+// Modified for Personal File Relay: protected API session-loss regression tests (2026-11-05).
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { expired, loggedIn } = vi.hoisted(() => ({ expired: vi.fn(), loggedIn: vi.fn(() => true) }));
+vi.mock('@/store', () => ({ state: { sessionId: 'test-session' }, getters: { isLoggedIn: loggedIn } }));
+vi.mock('@/utils/auth', () => ({ sessionExpired: expired }));
 
 vi.mock('@/utils/constants', () => {
   return {
@@ -32,7 +37,41 @@ vi.mock('@/utils/constants', () => {
   };
 });
 
-import { adjustedData } from './utils.js';
+import { adjustedData, fetchURL } from './utils.js';
+
+describe('protected API authentication failure', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    loggedIn.mockReturnValue(true);
+    vi.stubGlobal('location', { origin: 'https://relay.example.test', href: 'https://relay.example.test/chat' });
+  });
+  afterEach(() => vi.unstubAllGlobals());
+  const respond = status => vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ status, text: async () => 'request failed' }));
+  it('returns to login on a same-origin protected resource 401', async () => {
+    respond(401);
+    await expect(fetchURL('/api/resources?path=%2F')).rejects.toMatchObject({ status: 401, sessionExpired: true });
+    expect(expired).toHaveBeenCalledOnce();
+    expect(fetch).toHaveBeenCalledWith('/api/resources?path=%2F', expect.objectContaining({ credentials: 'same-origin' }));
+  });
+  it.each(['/public/api/resources', '/api/auth/login', 'https://other.example.test/api/resources'])(
+    'does not redirect for public, login or foreign requests: %s', async url => {
+      respond(401);
+      await expect(fetchURL(url)).rejects.toMatchObject({ status: 401 });
+      expect(expired).not.toHaveBeenCalled();
+    });
+  it('respects the explicit unauthenticated flag and logged-out state', async () => {
+    respond(401);
+    await expect(fetchURL('/api/resources', {}, false)).rejects.toMatchObject({ status: 401 });
+    loggedIn.mockReturnValue(false);
+    await expect(fetchURL('/api/resources')).rejects.toMatchObject({ status: 401 });
+    expect(expired).not.toHaveBeenCalled();
+  });
+  it('does not log out for server errors', async () => {
+    respond(500);
+    await expect(fetchURL('/api/resources')).rejects.toMatchObject({ status: 500 });
+    expect(expired).not.toHaveBeenCalled();
+  });
+});
 
 describe('adjustedData', () => {
   it('should append the URL and process directory data correctly', () => {

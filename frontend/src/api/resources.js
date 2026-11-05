@@ -1,3 +1,4 @@
+// Modified for Personal File Relay: stop authenticated directory probes on session loss (2026-11-05).
 import { notify } from '@/notify'
 import { getters, mutations, state } from '@/store'
 import { globalVars } from '@/utils/constants'
@@ -6,7 +7,7 @@ import {
   notifyDownloadComplete,
   notifyDownloadError,
 } from '@/utils/appNotifications'
-import { renew } from '@/utils/auth'
+import { renew, sessionExpired } from '@/utils/auth'
 import { getApiPath, getPublicApiPath, getParentDir } from '@/utils/url.js'
 import { adjustedData, fetchURL } from './utils'
 import { rememberViewToken } from './viewToken'
@@ -141,7 +142,7 @@ export async function fetchFiles(source, path, content = false, metadata = false
     cacheViewTokenFromListing(adjusted)
     return adjusted
   } catch (err) {
-    notify.showError(err.message || 'Error fetching data')
+    if (!err.sessionExpired) notify.showError(err.message || 'Error fetching data')
     throw err
   }
 }
@@ -159,7 +160,8 @@ export async function listDirectoryEntries(source, path) {
       return null
     }
     return new Map(data.items.map((item) => [item.name, { size: item.size, type: item.type }]))
-  } catch {
+  } catch (error) {
+    if (error.status === 401) throw error;
     return null
   }
 }
@@ -852,6 +854,9 @@ export function post(
             reject(error);
             return;
           }
+          if (request.status === 401 && isRetry && !getters.isShare()) {
+            sessionExpired();
+          }
           // Session expired mid-upload: renew once and retry the same body.
           if (request.status === 401 && !isRetry && !getters.isShare()) {
             void renew()
@@ -861,7 +866,7 @@ export function post(
                 }
                 return startRequest(true).then(resolve, reject);
               })
-              .catch(() => {
+              .catch((renewError) => {
                 if (rejectIfAborted(reject)) {
                   return;
                 }
@@ -875,7 +880,7 @@ export function post(
                 const error = new Error(errorMessage);
                 error.status = request.status;
                 error.response = { status: request.status, responseText: request.responseText };
-                notify.showError(errorMessage);
+                if (renewError?.status !== 401) notify.showError(errorMessage);
                 reject(error);
               });
             return;

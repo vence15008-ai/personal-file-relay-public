@@ -10,6 +10,10 @@ The upstream [Apache-2.0 license](LICENSE) and existing attribution remain in pl
 | --- | --- |
 | `backend/internal/icons/manifest.go` | Relay Web App name, launch path and icon references |
 | `frontend/src/components/prompts/Upload.vue` | Initial clipboard/drop items, compact upload presentation and completion behavior |
+| `frontend/src/api/resources.js` | Preserve authorization errors from directory probes and return expired uploads to login |
+| `frontend/src/api/utils.js` | Handle same-origin protected API 401 responses without redirecting public/login requests |
+| `frontend/src/utils/auth.js` | Recheck cookies after foreground / bfcache restoration and handle failed renewal |
+| `frontend/src/utils/upload.js` | Stop private upload queue work once the authenticated user has been cleared |
 | `frontend/src/components/sidebar/General.vue` | Navigation to the unified relay |
 | `frontend/src/router/index.ts` | Authenticated relay route and landing-page integration |
 | `frontend/src/store/getters.ts` | Relay route metadata for the application layout |

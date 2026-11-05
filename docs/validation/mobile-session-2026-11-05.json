@@ -1,0 +1,16 @@
+{
+  "report": [
+    "normal PNG upload succeeds",
+    "visibility resume: missing session redirected to /login?redirect=/chat",
+    "pageshow resume: missing session redirected to /login?redirect=/chat",
+    "protected GET 401 redirects to login",
+    "upload POST with cookie cleared: renew 401 redirects, no file written",
+    {
+      "check": "UI re-login, PNG upload/download",
+      "sha256": "6ed85da8ef820f8acddf41af1d51e3f6dcd9b9e32b66c7eb908952c1492a9079"
+    },
+    "renew 500 retains /chat",
+    "anonymous list and renewal 401",
+    "no pageerror or unhandled rejection"
+  ]
+}

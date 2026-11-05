@@ -1,3 +1,4 @@
+// Modified for Personal File Relay: recover authentication after mobile resume (2026-11-05).
 import { getters, mutations, state } from "@/store";
 import { globalVars } from "@/utils/constants";
 import { getApiPath } from "@/utils/url.js";
@@ -128,7 +129,12 @@ export async function renew() {
       mutations.setSession(generateRandomCode(8));
       return;
     }
-    throw new Error(body);
+    const error = new Error(body);
+    error.status = res.status;
+    if (res.status === 401 && getters.isLoggedIn()) {
+      sessionExpired();
+    }
+    throw error;
   })().finally(() => {
     renewInFlight = null;
   });
@@ -167,6 +173,19 @@ export function startSessionKeepAlive() {
   keepAliveTimer = setInterval(() => {
     void ensureSessionFresh();
   }, KEEP_ALIVE_INTERVAL_MS);
+  document.addEventListener("visibilitychange", refreshSessionOnResume);
+  window.addEventListener("pageshow", refreshSessionOnPageShow);
+}
+
+function refreshSessionOnResume() {
+  if (document.visibilityState !== "visible" || !getters.isLoggedIn()) return;
+  // Mobile pages can retain their JS state after the browser has discarded or
+  // expired the cookie. Always check the server when returning to the foreground.
+  void renew().catch(() => {}); // 401 redirects in renew(); network errors retain the session.
+}
+
+function refreshSessionOnPageShow(event) {
+  if (event.persisted) refreshSessionOnResume();
 }
 
 export function stopSessionKeepAlive() {
@@ -174,6 +193,8 @@ export function stopSessionKeepAlive() {
     clearInterval(keepAliveTimer);
     keepAliveTimer = null;
   }
+  document.removeEventListener("visibilitychange", refreshSessionOnResume);
+  window.removeEventListener("pageshow", refreshSessionOnPageShow);
 }
 
 export function generateRandomCode(length) {
