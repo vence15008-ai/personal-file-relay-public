@@ -1,0 +1,27 @@
+# Personal File Relay
+
+> A Windows-hosted personal file, image and text relay based on FileBrowser Quantum v2.0.2-stable, with browser/PWA access and an optional compact Windows x64 client.
+
+This is a public, independently customized repository. Users deploy their own host and authenticate with their own file-service account. Source availability grants no access to a personal file server. This navigation file does not guarantee discovery by any search or AI service.
+
+## Project overview
+
+- [Chinese overview](https://github.com/vence15008-ai/personal-file-relay-public/blob/main/README.md): purpose, supported roles, download and limits.
+- [English overview](https://github.com/vence15008-ai/personal-file-relay-public/blob/main/README.en.md): English project summary and setup entry points.
+- [Project facts](https://github.com/vence15008-ai/personal-file-relay-public/blob/main/docs/PROJECT-FACTS.md): identity, upstream, architecture, released version and data/network boundaries.
+
+## Setup and use
+
+- [Releases](https://github.com/vence15008-ai/personal-file-relay-public/releases/latest): Windows x64 portable client, quick start and SHA-256 checksums.
+- [Host and browser client guide](https://github.com/vence15008-ai/personal-file-relay-public/blob/main/PERSONAL-RELAY.md): native Windows host, dedicated storage, authentication and Funnel.
+- [Windows desktop client](https://github.com/vence15008-ai/personal-file-relay-public/blob/main/DESKTOP-CLIENT.md): WebView2 requirements, shortcuts, build and removal.
+- [Remote client quick start](https://github.com/vence15008-ai/personal-file-relay-public/blob/main/desktop/windows/QUICKSTART.zh-CN.md): unzip, configure the host HTTPS root URL and sign in.
+- [FAQ](https://github.com/vence15008-ai/personal-file-relay-public/blob/main/docs/FAQ.zh-CN.md): phone VPN, clipboard images, chunked transfers, public access, storage and backups.
+
+## Evidence and maintenance
+
+- [Validation](https://github.com/vence15008-ai/personal-file-relay-public/blob/main/docs/VALIDATION.md): dated local checks, transfer hashes, process memory scope and remaining physical-device tests.
+- [Discoverability scope](https://github.com/vence15008-ai/personal-file-relay-public/blob/main/docs/DISCOVERABILITY.md): private-repository limits and content maintenance.
+- [License](https://github.com/vence15008-ai/personal-file-relay-public/blob/main/LICENSE): Apache-2.0; packaged WebView2 dependencies retain their own notices.
+
+The host runs Tailscale Funnel as a public HTTPS entry; application login protects the files. Remote clients do not need Tailscale. Android support is a Web App, not an APK. Clipboard reads require explicit action. Local tests do not establish remote-network acceptance. Personal storage is not a backup or end-to-end encrypted messaging.

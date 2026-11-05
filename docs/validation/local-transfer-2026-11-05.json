@@ -1,0 +1,91 @@
+{
+  "date": "2026-11-05",
+  "chunks": [
+    {
+      "offset": 0
+    },
+    {
+      "offset": 10485760
+    },
+    {
+      "offset": 20971520
+    },
+    {
+      "offset": 31457280
+    },
+    {
+      "offset": 41943040
+    },
+    {
+      "offset": 52428800
+    },
+    {
+      "offset": 62914560
+    },
+    {
+      "offset": 73400320
+    },
+    {
+      "offset": 83886080
+    },
+    {
+      "offset": 94371840
+    },
+    {
+      "offset": 104857600
+    },
+    {
+      "offset": 115343360
+    },
+    {
+      "offset": 125829120
+    },
+    {
+      "offset": 136314880
+    },
+    {
+      "offset": 146800640
+    },
+    {
+      "offset": 157286400
+    },
+    {
+      "offset": 167772160
+    },
+    {
+      "offset": 178257920
+    },
+    {
+      "offset": 188743680
+    },
+    {
+      "offset": 199229440
+    }
+  ],
+  "checks": [
+    "message first-line, character count and timestamp hotzone copy",
+    "fullscreen selection and actual browser clipboard paste/send",
+    "real clipboard PNG upload pixels and download SHA256; synthetic paste event image bytes",
+    {
+      "name": "统一列表-小文件.bin",
+      "bytes": 2097152,
+      "sha256": "db50234530dc622f322f27f5ae8fab7483320ebc08c74f272120ef03d64117bf",
+      "upload": "equal",
+      "browserDownload": "equal"
+    },
+    {
+      "name": "统一列表-200MiB.bin",
+      "bytes": 209715200,
+      "sha256": "f51daf7f50a524adcb5fd3f1129783f5eed00749461848bd8730794a7d7fbf4d",
+      "upload": "equal",
+      "browserDownload": "equal"
+    },
+    "manifest standalone launch /chat and all PNG icons HTTP200",
+    "390px narrow layout: no horizontal overflow",
+    "long history scrolls internally with nonblack gradient background",
+    "compact shows exactly 3 rows, scrolls history, has no composer, dropped file uploads through queue",
+    "real native WebView2 logged into disposable test account and loaded authenticated compact relay",
+    "anonymous list/download/messages/upload rejected, signup disabled"
+  ],
+  "scope": "Isolated local tests using synthetic data; not remote acceptance"
+}

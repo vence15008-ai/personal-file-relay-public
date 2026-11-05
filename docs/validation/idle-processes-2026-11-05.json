@@ -1,0 +1,56 @@
+{
+  "service": [
+    {
+      "Id": 13260,
+      "ProcessName": "filebrowser",
+      "WorkingSetMiB": 64.8,
+      "PrivateMiB": 88.0
+    }
+  ],
+  "scope": "Final integrated-header installed client idle snapshot; working sets include shared pages and are not additive physical memory",
+  "client": [
+    {
+      "Id": 13936,
+      "ProcessName": "msedgewebview2",
+      "WorkingSetMiB": 122.5,
+      "PrivateMiB": 36.4
+    },
+    {
+      "Id": 24656,
+      "ProcessName": "msedgewebview2",
+      "WorkingSetMiB": 20.9,
+      "PrivateMiB": 7.9
+    },
+    {
+      "Id": 44664,
+      "ProcessName": "msedgewebview2",
+      "WorkingSetMiB": 98.8,
+      "PrivateMiB": 57.4
+    },
+    {
+      "Id": 46596,
+      "ProcessName": "msedgewebview2",
+      "WorkingSetMiB": 19.9,
+      "PrivateMiB": 3.5
+    },
+    {
+      "Id": 49180,
+      "ProcessName": "msedgewebview2",
+      "WorkingSetMiB": 83.8,
+      "PrivateMiB": 91.6
+    },
+    {
+      "Id": 49528,
+      "ProcessName": "msedgewebview2",
+      "WorkingSetMiB": 41.5,
+      "PrivateMiB": 13.2
+    },
+    {
+      "Id": 13036,
+      "ProcessName": "RelayClient",
+      "WorkingSetMiB": 75.9,
+      "PrivateMiB": 47.2
+    }
+  ],
+  "timestamp": "2026-11-05T15:40:38.589394+08:00"
+}
