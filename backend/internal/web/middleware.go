@@ -1,3 +1,4 @@
+// Modified for Personal File Relay: revocable 90-day browser sign-in (2026-11-05).
 package web
 
 import (
@@ -252,6 +253,14 @@ func resolveBearerTokenUser(rawToken string) (*users.User, error) {
 		return nil, err
 	}
 	if isSession {
+		// Personal File Relay (2026-11-05): revocation also invalidates already issued JWTs.
+		var claims users.AuthToken
+		if _, err := jwt.ParseWithClaims(rawToken, &claims, auth.JWTSigningKeyFunc(), jwt.WithoutClaimsValidation()); err != nil {
+			return nil, err
+		}
+		if claims.RememberDevice != "" && !state.ValidateRememberedDevice(claims.RememberDevice, &userValue) {
+			return nil, fmt.Errorf("browser credential expired or revoked")
+		}
 		return &userValue, nil
 	}
 	tokenName, ok := state.TokenNameForRawToken(&userValue, rawToken)
@@ -373,7 +382,8 @@ func LoginHelper(disableOtp bool, fn handleFunc) handleFunc {
 			}
 		}
 		// Check if request has a valid admin token first
-		if tokenStr, err := ExtractToken(r); err == nil && tokenStr != "" {
+		// Personal File Relay: a short admin session cannot enroll a 90-day credential.
+		if tokenStr, err := ExtractToken(r); err == nil && tokenStr != "" && r.Header.Get("X-Remember-Device") != "true" {
 			keyFunc := auth.JWTSigningKeyFunc()
 			var tk users.AuthToken
 			if token, err := jwt.ParseWithClaims(tokenStr, &tk, keyFunc); err == nil && token.Valid {

@@ -1,3 +1,4 @@
+// Modified for Personal File Relay: revocable 90-day browser sign-in (2026-11-05).
 package web
 
 import (
@@ -224,7 +225,8 @@ func loginHandler(w http.ResponseWriter, r *http.Request, d *Context) (int, erro
 	if passwordUser && d.User.RequirePasswordChange {
 		return http.StatusForbidden, errors.ErrPasswordChangeRequired
 	}
-	status, err := printToken(w, r, d.User, "")
+	// Personal File Relay: opt-in only after full credential/MFA validation (2026-11-05).
+	status, err := loginTokenResponse(w, r, d.User)
 	if err != nil || status != 0 {
 		return status, err
 	}
@@ -245,6 +247,23 @@ func sessionCookieDomain(r *http.Request) string {
 // @Success 200 {object} map[string]string "{"logoutUrl": "http://..."}"
 // @Router /api/auth/logout [post]
 func logoutHandler(w http.ResponseWriter, r *http.Request, d *Context) (int, error) {
+	// Personal File Relay: explicit logout forgets this browser and its bound sessions (2026-11-05).
+	if device, user, err := rememberFromCookie(r); err == nil {
+		if !rememberRequestAllowed(r) {
+			return http.StatusForbidden, fmt.Errorf("same-origin request required")
+		}
+		if err := state.RevokeRememberedDevice(user.ID, device.ID); err != nil {
+			return http.StatusInternalServerError, err
+		}
+	} else if id := sessionDeviceID(d.Token); id != "" && d.User != nil {
+		if !rememberRequestAllowed(r) {
+			return http.StatusForbidden, fmt.Errorf("same-origin request required")
+		}
+		if err := state.RevokeRememberedDevice(d.User.ID, id); err != nil {
+			return http.StatusInternalServerError, err
+		}
+	}
+	setRememberCookie(w, r, "", time.Unix(0, 0), -1)
 	if err := state.RevokeToken(d.Token); err != nil {
 		logger.Errorf("Failed to revoke token on logout: %v", err)
 	}

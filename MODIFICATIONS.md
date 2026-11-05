@@ -34,3 +34,11 @@ Prominent modification notices are present in the changed source files. Model fi
 ## Public client release 0.1.1
 
 The public client package uses generic host-address examples and includes this modification summary. It contains the same tested client executable identified by SHA-256 in RELEASE.json; the host URL is configured by each user, not embedded as a personal server address. No personal runtime database, cookies or file contents are distributed.
+
+## 2026-11-06: remembered browsers and image drag-out
+
+- Changed upstream authentication, JWT session helpers, middleware, router, user claims and SQLite initialization to support opt-in fixed 90-day browser credentials. Short sessions are signed with a revocable device binding. The additive `relay_remembered_devices` table stores credential hashes, never raw secrets. Password/TOTP/MFA changes invalidate prior credentials. Password login and completed passkey MFA can enroll; an existing short admin session alone cannot enroll.
+- Changed `frontend/src/api/auth.js`, `utils/auth.js`, `api/utils.js`, `views/Login.vue`, `components/prompts/Totp.vue` and their tests: explicit enrollment, automatic short-session restoration, bounded retries, same-origin request headers and safe transient-error handling.
+- Added `frontend/src/components/RememberDevices.vue` and state/web remembered-device modules and security tests: per-user listing and individual revocation. Explicit logout forgets the current browser. No anonymous API/file access was added.
+- Updated the Windows client and unified relay: image rows can initiate native Windows FileDrop using a deliberately downloaded file. Dedicated local cache is limited to 256 MiB with 32 MiB per image and timed cleanup. File preparation and cache integrity are tested; cross-application drop compatibility requires real target-app acceptance.
+- Updated client documentation. Production and test profiles remain separate; real user credentials, runtime databases and personal host addresses are excluded from publication.

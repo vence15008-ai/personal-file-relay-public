@@ -1,7 +1,7 @@
 // Modified for Personal File Relay: handle protected API session loss (2026-11-05).
 import i18n from "@/i18n";
 import { getters, state } from "@/store";
-import { sessionExpired } from "@/utils/auth";
+import { sessionExpired, restoreRememberedSession } from "@/utils/auth";
 
 const defaultRequestTimeoutMs = 5000;
 
@@ -17,7 +17,7 @@ export function requestTimeoutSignal(ms = defaultRequestTimeoutMs) {
   return controller.signal;
 }
 
-export async function fetchURL(url, opts, _auth = true) {
+export async function fetchURL(url, opts, _auth = true, retried = false) {
   opts = opts || {};
   opts.headers = opts.headers || {};
 
@@ -57,6 +57,8 @@ export async function fetchURL(url, opts, _auth = true) {
         !/\/public\/api\//.test(requested.pathname) &&
         !/\/api\/auth(?:\/|$)/.test(requested.pathname);
       if (protectedApi) {
+        // Personal File Relay: retry once after restoring a remembered browser.
+        if (!retried && await restoreRememberedSession()) return fetchURL(url, opts, _auth, true);
         error.sessionExpired = true;
         sessionExpired();
       }

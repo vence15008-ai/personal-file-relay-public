@@ -1,3 +1,4 @@
+<!-- Modified for Personal File Relay: optional remembered-browser sign-in (2026-11-05). -->
 <template>
   <div class="card-content">
     <div v-if="error !== ''" class="wrong-login card">{{ error }}</div>
@@ -62,6 +63,8 @@ export default {
     },
   },
   props: {
+    rememberDevice: { type: Boolean, default: false },
+    deviceName: { type: String, default: '' },
     redirect: {
       type: String,
       default: "",
@@ -135,6 +138,7 @@ export default {
             this.password,
             this.recaptcha,
             this.code,
+            this.rememberDevice, this.deviceName,
           );
           await initAuth();
           // Wait for navigation so Layout mounts and registers the toast callback before we toast
@@ -147,6 +151,7 @@ export default {
               this.password,
               this.recaptcha,
               this.code,
+              this.rememberDevice, this.deviceName,
             );
             await initAuth();
             await this.$router.push(this.redirect);
@@ -171,7 +176,7 @@ export default {
       }
       this.verifyInFlight = true;
       try {
-        await authApi.beginPasskeyLogin(this.username, this.password);
+        await authApi.beginPasskeyLogin(this.username, this.password, this.rememberDevice, this.deviceName);
         if (this.redirect !== "") {
           await initAuth();
           await this.$router.push(this.redirect);

@@ -25,6 +25,7 @@ import {
   getSessionJwtExpiresAt,
   msUntilRefresh,
   renew,
+  restoreRememberedSession,
   SESSION_REFRESH_BEFORE_MS,
   shouldRefreshBeforeExpiry,
   startSessionKeepAlive,
@@ -112,6 +113,30 @@ describe('tokenRefresh helpers', () => {
   it('treats missing expiry as needing refresh', () => {
     expect(shouldRefreshBeforeExpiry(null, SESSION_REFRESH_BEFORE_MS)).toBe(true);
     expect(msUntilRefresh(null, SESSION_REFRESH_BEFORE_MS)).toBe(0);
+  });
+});
+
+describe('remembered browser restoration', () => {
+  beforeEach(() => { vi.clearAllMocks(); storeMock.getters.isLoggedIn.mockReturnValue(true); vi.stubGlobal('location', { pathname: '/chat', search: '', href: 'https://relay.example.test/chat' }); });
+  afterEach(() => { stopSessionKeepAlive(); vi.unstubAllGlobals(); });
+  it('recovers renewal 401 without logging out or storing a token in web storage', async () => {
+    const exp = Math.floor(Date.now()/1000)+7200;
+    global.fetch = vi.fn().mockResolvedValueOnce({status:401,text:async()=> 'expired'}).mockResolvedValueOnce({status:200,text:async()=> makeJwt(exp)});
+    await renew(); expect(getSessionJwtExpiresAt()).toBe(exp); expect(storeMock.mutations.setCurrentUser).not.toHaveBeenCalledWith(null);
+    expect(fetch).toHaveBeenLastCalledWith('/api/auth/remember/restore', expect.objectContaining({ credentials:'same-origin', headers:{'X-Relay-Request':'1'} }));
+  });
+  it('restores on initial page load even without in-memory login state', async () => {
+    storeMock.getters.isLoggedIn.mockReturnValue(false);
+    storeMock.mutations.setCurrentUser.mockImplementationOnce(user => { storeMock.state.user = user; });
+    global.fetch=vi.fn().mockResolvedValueOnce({status:401,text:async()=> 'missing'}).mockResolvedValueOnce({status:200,text:async()=> makeJwt(Math.floor(Date.now()/1000)+7200)}).mockResolvedValueOnce({status:200,json:async()=> ({username:'synthetic',loginMethod:'password'})});
+    await validateLogin(); expect(storeMock.mutations.setCurrentUser).toHaveBeenCalledWith(expect.objectContaining({username:'synthetic'})); expect(fetch).toHaveBeenCalledTimes(3); storeMock.state.user = null;
+  });
+  it('coalesces concurrent restore attempts', async () => {
+    respond(200,makeJwt(Math.floor(Date.now()/1000)+7200));
+    await Promise.all([restoreRememberedSession(),restoreRememberedSession()]); expect(fetch).toHaveBeenCalledOnce();
+  });
+  it('keeps the browser and page state after a temporary restore error', async () => {
+    respond(500,'temporary'); await expect(restoreRememberedSession()).rejects.toMatchObject({status:500}); expect(storeMock.mutations.setCurrentUser).not.toHaveBeenCalledWith(null);
   });
 });
 
@@ -251,7 +276,7 @@ describe('mobile session recovery', () => {
     respond(401, 'no token present in request');
     document.dispatchEvent(new Event('visibilitychange'));
     await flush();
-    expect(fetch).toHaveBeenCalledOnce();
+    expect(fetch).toHaveBeenCalledTimes(2); // renew, then a remembered-browser restore attempt
     expect(storeMock.mutations.setCurrentUser).toHaveBeenCalledWith(null);
   });
   it('checks a restored page and keeps a valid session', async () => {

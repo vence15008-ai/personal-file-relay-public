@@ -1,3 +1,4 @@
+// Modified for Personal File Relay: revocable 90-day browser sign-in (2026-11-05).
 import { fetchJSON, fetchURL } from '@/api/utils'
 import { notify } from '@/notify'
 import { getApiPath } from '@/utils/url.js'
@@ -39,7 +40,8 @@ export async function changeRequiredPassword(username, currentPassword, newPassw
 }
 
 // POST /api/auth/login
-export async function login(username, password, recaptcha, otp) {
+// Modified for Personal File Relay: explicit 90-day browser enrollment (2026-11-05).
+export async function login(username, password, recaptcha, otp, rememberDevice = false, deviceName = '') {
   if (!otp) {
     otp = ''
   }
@@ -59,6 +61,8 @@ export async function login(username, password, recaptcha, otp) {
       headers: {
         'X-Password': encodeURIComponent(password),
         'X-Secret': otp,
+        'X-Relay-Request': '1',
+        ...(rememberDevice ? { 'X-Remember-Device': 'true', 'X-Device-Name': encodeURIComponent(deviceName) } : {}),
       }
     });
 
@@ -84,7 +88,7 @@ export async function login(username, password, recaptcha, otp) {
 export async function logout() {
   try {
     const apiPath = getApiPath('auth/logout')
-    await fetchURL(apiPath, { method: 'POST' })
+    await fetchURL(apiPath, { method: 'POST', headers: { 'X-Relay-Request': '1' } })
   } catch (err) {
     notify.showError(err.message || 'Failed to logout')
     throw err
@@ -296,7 +300,7 @@ function formatAttestationResponse(cred) {
   }
 }
 
-export async function beginPasskeyLogin(username, password) {
+export async function beginPasskeyLogin(username, password, rememberDevice = false, deviceName = '') {
   const apiPath = getApiPath('auth/webauthn/begin-login', { username })
   const res = await fetch(apiPath, {
     method: 'POST',
@@ -319,7 +323,7 @@ export async function beginPasskeyLogin(username, password) {
   const finishRes = await fetch(finishPath, {
     method: 'POST',
     credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Relay-Request': '1', ...(rememberDevice ? { 'X-Remember-Device': 'true', 'X-Device-Name': encodeURIComponent(deviceName) } : {}) },
     body: JSON.stringify(formatted),
   })
 

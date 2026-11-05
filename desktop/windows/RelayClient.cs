@@ -86,12 +86,19 @@ namespace PersonalRelay {
         readonly bool testMode;
         readonly string profileDirectory;
         readonly bool darkTheme;
+        readonly Dictionary<string, string> dragFiles = new Dictionary<string, string>();
+        readonly System.Windows.Forms.Timer dragCleanup = new System.Windows.Forms.Timer { Interval = 600000 };
+        bool dragPreparing, nativeDragging;
+        int dragGeneration;
+        string DragCacheDirectory { get { return Path.Combine(profileDirectory, "DragCache"); } }
         public RelayWindow(ClientConfig initial, bool testing, string testProfile) {
             config = initial; testMode = testing;
             AutoScaleMode = AutoScaleMode.None;
             using (var personal = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"))
                 darkTheme = personal != null && Convert.ToInt32(personal.GetValue("AppsUseLightTheme", 1)) == 0;
             profileDirectory = testProfile ?? Path.Combine(ClientConfig.DirectoryPath, "WebView2");
+            CleanDragCache(false);
+            dragCleanup.Tick += delegate { CleanDragCache(false); }; dragCleanup.Start();
             Text = "中转站"; ClientSize = new Size(340, 440); MinimumSize = new Size(320, 440);
             StartPosition = FormStartPosition.CenterScreen; Font = new Font("Microsoft YaHei UI", 9);
             FormBorderStyle = FormBorderStyle.Sizable; BackColor = Color.FromArgb(244, 248, 253);
@@ -116,6 +123,7 @@ namespace PersonalRelay {
             var menu = new ContextMenuStrip();
             menu.Items.Add("打开中转站", null, delegate { ShowWindow(); });
             menu.Items.Add("热键设置", null, delegate { ShowSettings(); });
+            menu.Items.Add("登录设备", null, delegate { ShowDevices(); });
             menu.Items.Add("文件管理", null, delegate { OpenBrowser("/files/Personal/"); });
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("退出客户端（文件服务继续运行）", null, delegate { exiting = true; Close(); });
@@ -201,6 +209,7 @@ namespace PersonalRelay {
                     Uri current;
                     var relay = Uri.TryCreate(web.CoreWebView2.Source, UriKind.Absolute, out current) && SameOrigin(current.AbsoluteUri, config.ServerUrl) && current.AbsolutePath == "/chat";
                     SetWebHeader(relay);
+                    if (!relay) { dragGeneration++; dragFiles.Clear(); CleanDragCache(true); }
                 };
                 web.CoreWebView2.NavigationStarting += delegate(object sender, CoreWebView2NavigationStartingEventArgs e) {
                     if (!SameOrigin(e.Uri, config.ServerUrl)) { e.Cancel = true; SetStatus("已阻止跳转到其他网站，请在浏览器中打开。"); }
@@ -216,6 +225,7 @@ namespace PersonalRelay {
                         if ((string)action == "settings") BeginInvoke(new Action(ShowSettings));
                         if ((string)action == "minimize") BeginInvoke(new Action(delegate { WindowState = FormWindowState.Minimized; }));
                         if ((string)action == "hide") BeginInvoke(new Action(Hide));
+                        if ((string)action == "drag-image") BeginInvoke(new Action(delegate { DragImage(message); }));
                     } catch { }
                 };
                 web.CoreWebView2.PermissionRequested += delegate(object sender, CoreWebView2PermissionRequestedEventArgs e) {
@@ -257,7 +267,96 @@ namespace PersonalRelay {
         void SetWebHeader(bool active) { webHeaderActive = active; caption.Visible = !active; caption.Height = active ? 0 : (int)Math.Round(32*dpiFactor); }
         void SetStatus(string text) { if (IsDisposed) return; status.Text = text; status.Height = (int)Math.Round(34*dpiFactor); }
         void ShowWindow() { Show(); WindowState = FormWindowState.Normal; Activate(); BringToFront(); }
+        void ShowDevices() { ShowWindow(); if (IsChatPage()) web.CoreWebView2.PostWebMessageAsJson("{\"type\":\"personal-relay-command\",\"action\":\"devices\"}"); else SetStatus("请先登录中转站，再打开登录设备。"); }
         bool IsChatPage() { return web.CoreWebView2 != null && web.Source != null && SameOrigin(web.Source.AbsoluteUri, config.ServerUrl) && web.Source.AbsolutePath == "/chat"; }
+        // Only a deliberate image drag can materialize a file. Never expose cookies to page JS.
+        public static bool ValidDragImage(string url, string name, string server) {
+            Uri uri;
+            if (!SameOrigin(url, server) || !Uri.TryCreate(url, UriKind.Absolute, out uri) || uri.AbsolutePath != "/api/resources/download" || !String.IsNullOrEmpty(uri.Fragment) ||
+                String.IsNullOrWhiteSpace(name) || name.Length > 180 || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || Path.GetFileName(name) != name ||
+                !System.Text.RegularExpressions.Regex.IsMatch(name, @"\.(png|jpe?g|gif|webp|bmp|avif|heic|heif)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) return false;
+            var query = new Dictionary<string,string>();
+            foreach (var pair in uri.Query.TrimStart('?').Split('&')) {
+                var index = pair.IndexOf('='); if (index < 1) return false;
+                var key = Uri.UnescapeDataString(pair.Substring(0,index));
+                if ((key != "source" && key != "file" && key != "inline") || query.ContainsKey(key)) return false;
+                query[key] = Uri.UnescapeDataString(pair.Substring(index+1).Replace("+"," "));
+            }
+            string source, path;
+            return query.TryGetValue("source",out source) && source == "Personal" && query.TryGetValue("file",out path) && path.StartsWith("/") &&
+                !path.Split('/').Contains("..") && path.Replace('\\','/').Split('/').Last() == name;
+        }
+        void CleanDragCache(bool all) {
+            try {
+                if (!Directory.Exists(DragCacheDirectory)) return;
+                foreach (var directory in new DirectoryInfo(DragCacheDirectory).GetDirectories()) {
+                    if (all || directory.CreationTimeUtc < DateTime.UtcNow.AddHours(-1)) {
+                        // Only generated direct children of this profile's dedicated cache.
+                        Guid parsed; if (Guid.TryParseExact(directory.Name, "N", out parsed)) try { directory.Delete(true); } catch { }
+                    }
+                }
+            } catch { }
+        }
+        void DragFeedback(string action, string text) {
+            if (IsChatPage()) web.CoreWebView2.PostWebMessageAsJson(new JavaScriptSerializer().Serialize(new { type = "personal-relay-command", action, text }));
+        }
+        async void DragImage(Dictionary<string, object> message) {
+            if (!IsChatPage() || dragPreparing || nativeDragging || (Control.MouseButtons & MouseButtons.Left) == 0) return;
+            object rawUrl, rawName, rawVersion;
+            if (!message.TryGetValue("url", out rawUrl) || !message.TryGetValue("name", out rawName) || !message.TryGetValue("version", out rawVersion)) return;
+            var url = rawUrl as string; var name = rawName as string; var version = rawVersion as string;
+            if (!ValidDragImage(url, name, config.ServerUrl) || version == null || version.Length > 150) return;
+            var generation = dragGeneration; var key = url + "\n" + version; string file = null; string createdDirectory = null;
+            dragPreparing = true;
+            try {
+                if (!dragFiles.TryGetValue(key, out file) || !File.Exists(file) || File.GetCreationTimeUtc(file) < DateTime.UtcNow.AddMinutes(-5)) {
+                    CleanDragCache(false);
+                    if (Directory.Exists(DragCacheDirectory) && Directory.GetFiles(DragCacheDirectory,"*",SearchOption.AllDirectories).Sum(p => new FileInfo(p).Length) > 224L*1024*1024) throw new InvalidOperationException();
+                    DragFeedback("drag-status", "正在准备图片，保持按住鼠标…");
+                    var request = (HttpWebRequest)WebRequest.Create(url);
+                    request.Method = "GET"; request.AllowAutoRedirect = false; request.Timeout = 30000; request.ReadWriteTimeout = 30000;
+                    request.CookieContainer = new CookieContainer();
+                    var cookies = await web.CoreWebView2.CookieManager.GetCookiesAsync(url);
+                    foreach (var cookie in cookies) {
+                        if (cookie.Name != "filebrowser_quantum_jwt") continue;
+                        request.CookieContainer.Add(new Uri(config.ServerUrl), new Cookie(cookie.Name, cookie.Value, "/") { Secure = cookie.IsSecure, HttpOnly = true });
+                    }
+                    createdDirectory = Path.Combine(DragCacheDirectory, Guid.NewGuid().ToString("N"));
+                    Directory.CreateDirectory(createdDirectory); file = Path.Combine(createdDirectory, name);
+                    using (var timeout = new CancellationTokenSource(30000))
+                    using (timeout.Token.Register(request.Abort))
+                    using (var response = (HttpWebResponse)await request.GetResponseAsync()) {
+                        if (response.StatusCode != HttpStatusCode.OK || response.ContentLength > 32L*1024*1024) throw new InvalidOperationException();
+                        using (var input = response.GetResponseStream())
+                        using (var output = new FileStream(file, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65536, true)) {
+                            var buffer = new byte[65536]; long total = 0; int count;
+                            while ((count = await input.ReadAsync(buffer, 0, buffer.Length)) != 0) {
+                                total += count; if (total > 32L*1024*1024 || generation != dragGeneration) throw new InvalidOperationException();
+                                await output.WriteAsync(buffer, 0, count);
+                            }
+                            if (total == 0) throw new InvalidOperationException();
+                        }
+                    }
+                    dragFiles[key] = file;
+                }
+                if (generation != dragGeneration || !IsChatPage()) return;
+                if ((Control.MouseButtons & MouseButtons.Left) == 0) { DragFeedback("drag-status", "图片已准备，再次拖动即可"); return; }
+                nativeDragging = true; dragPreparing = false;
+                var data = new DataObject(); data.SetData(DataFormats.FileDrop, new[] { file });
+                data.SetData("Preferred DropEffect", new MemoryStream(BitConverter.GetBytes((int)DragDropEffects.Copy)));
+                ReleaseCapture();
+                var result = web.DoDragDrop(data, DragDropEffects.Copy);
+                DragFeedback("drag-status", result == DragDropEffects.Copy ? "已交给目标应用" : "已取消拖动");
+            } catch (WebException failure) {
+                var response = failure.Response as HttpWebResponse;
+                DragFeedback(response != null && response.StatusCode == HttpStatusCode.Unauthorized ? "drag-auth-expired" : "drag-error", "图片准备失败，请重新登录或检查网络后重试");
+                if (response != null) response.Dispose();
+                if (createdDirectory != null) try { Directory.Delete(createdDirectory, true); } catch { }
+            } catch {
+                DragFeedback("drag-error", "图片无法拖出（最大32MB），可使用下载");
+                if (createdDirectory != null) try { Directory.Delete(createdDirectory, true); } catch { }
+            } finally { dragPreparing = false; nativeDragging = false; }
+        }
         async void ChooseUploadFiles() {
             if (!IsChatPage()) { SetStatus("请先在客户端登录中转站。"); return; }
             using (var dialog = new OpenFileDialog { Multiselect = true, CheckFileExists = true, Filter = "所有文件|*.*", Title = "选择要上传的文件" }) {
@@ -299,11 +398,12 @@ namespace PersonalRelay {
             ShowWindow(); settingsOpen = true;
             try {
                 using (var dialog = new SettingsDialog(config)) {
+                    dialog.DevicesRequested = delegate { dialog.Close(); BeginInvoke(new Action(ShowDevices)); };
                     dialog.SaveRequested = delegate(ClientConfig candidate) {
                         ApplyHotkeys(candidate);
                         try { if (!testMode) candidate.Save(); } catch { ApplyHotkeys(config); throw; }
                         bool changed = candidate.ServerUrl != config.ServerUrl; config = candidate; status.Height = 0;
-                        if (changed && web.CoreWebView2 != null) web.Source = new Uri(config.ServerUrl.TrimEnd('/') + "/chat?compact=1");
+                        if (changed && web.CoreWebView2 != null) { dragGeneration++; dragFiles.Clear(); CleanDragCache(true); web.Source = new Uri(config.ServerUrl.TrimEnd('/') + "/chat?compact=1"); }
                     };
                     dialog.ShowDialog(this);
                 }
@@ -346,12 +446,13 @@ namespace PersonalRelay {
             }
             base.WndProc(ref message);
         }
-        protected override void Dispose(bool disposing) { if (disposing) { ReleaseHotkeys(); tray.Dispose(); } base.Dispose(disposing); }
+        protected override void Dispose(bool disposing) { if (disposing) { dragCleanup.Dispose(); ReleaseHotkeys(); tray.Dispose(); } base.Dispose(disposing); }
     }
     public sealed class SettingsDialog : Form {
         readonly TextBox server = new TextBox();
         readonly List<TextBox> fields = new List<TextBox>();
         public Action<ClientConfig> SaveRequested;
+        public Action DevicesRequested;
         public SettingsDialog(ClientConfig current) {
             AutoScaleMode = AutoScaleMode.None;
             Text = "中转站 · 热键设置"; ClientSize = new Size(460, 330); FormBorderStyle = FormBorderStyle.FixedDialog; StartPosition = FormStartPosition.CenterParent; MaximizeBox = false; MinimizeBox = false;
@@ -367,6 +468,7 @@ namespace PersonalRelay {
             var note = new Label { Text = "点击热键框后按组合键，或手动输入。仅客户端运行时生效。", Left = 20, Top = 230, Width = 420, Height = 34, ForeColor = Color.DimGray }; Controls.Add(note);
             var save = new Button { Text = "保存", Left = 335, Top = 280, Width = 105, Height = 32 }; save.Click += Save; Controls.Add(save);
             var cancel = new Button { Text = "取消", Left = 220, Top = 280, Width = 100, Height = 32, DialogResult = DialogResult.Cancel }; Controls.Add(cancel);
+            var devices = new Button { Text = "登录设备", Left = 20, Top = 280, Width = 110, Height = 32 }; devices.Click += delegate { if (DevicesRequested != null) DevicesRequested(); }; Controls.Add(devices);
             CancelButton = cancel;
             Load += delegate {
                 using(var graphics = CreateGraphics()) {
@@ -423,6 +525,10 @@ namespace PersonalRelay {
             }
             bool duplicateRejected = false; try { ClientConfig.Validate(new ClientConfig { PasteHotkey = "Alt+Ctrl+Space" }); } catch (ArgumentException) { duplicateRejected = true; }
             if (!duplicateRejected) throw new Exception("duplicate guard");
+            if (!RelayWindow.ValidDragImage("http://127.0.0.1:18473/api/resources/download?source=Personal&file=%2Fsynthetic.png","synthetic.png","http://127.0.0.1:18473")) throw new Exception("image drag allow");
+            foreach (var candidate in new[] { "https://other.example/api/resources/download?source=Personal&file=%2Fsynthetic.png", "http://127.0.0.1:18473/api/users", "http://127.0.0.1:18473/api/resources/download?source=Other&file=%2Fsynthetic.png", "http://127.0.0.1:18473/api/resources/download?source=Personal&file=%2Fsynthetic.png&auth=secret" })
+                if (RelayWindow.ValidDragImage(candidate,"synthetic.png","http://127.0.0.1:18473")) throw new Exception("image drag URL guard");
+            if (RelayWindow.ValidDragImage("http://127.0.0.1:18473/api/resources/download?source=Personal&file=%2Fx.png","..\\x.png","http://127.0.0.1:18473")) throw new Exception("image drag filename guard");
             File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "self-test-result.txt"), "PASS: origin guards, hotkey parsing, duplicate validation");
         }
     }

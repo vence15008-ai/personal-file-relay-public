@@ -1,3 +1,4 @@
+// Modified for Personal File Relay: revocable 90-day browser sign-in (2026-11-05).
 package sqldb
 
 import (
@@ -93,6 +94,15 @@ func NewSQLStoreWithOptions(dbPath string, opts NewSQLStoreOpts) (*SQLStore, boo
 	}
 
 	store := &SQLStore{db: db}
+	// Personal File Relay addition (2026-11-05): additive table; no existing records changed.
+	if _, err = db.Exec(`CREATE TABLE IF NOT EXISTS relay_remembered_devices (
+		id TEXT PRIMARY KEY, user_id TEXT NOT NULL, secret_hash TEXT NOT NULL,
+		credential_hash TEXT NOT NULL, label TEXT NOT NULL, created INTEGER NOT NULL,
+		expires INTEGER NOT NULL, last_used INTEGER NOT NULL, revoked INTEGER NOT NULL DEFAULT 0
+	)`); err != nil {
+		db.Close()
+		return nil, existingDb, err
+	}
 
 	logger.Debugf("SQLite database initialized at %s", dbPath)
 

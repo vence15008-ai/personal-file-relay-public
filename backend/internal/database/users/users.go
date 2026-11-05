@@ -1,3 +1,4 @@
+// Modified for Personal File Relay: revocable 90-day browser sign-in (2026-11-05).
 package users
 
 import (
@@ -97,13 +98,13 @@ type WebAuthnCredential struct {
 
 type AuthToken struct {
 	MinimalAuthToken
-	Key         string      `json:"key,omitempty"` // for backward compatibility
-	Token       string      `json:"token,omitempty"`
-	Name        string      `json:"name,omitempty"`
-	Username    string      `json:"username,omitempty"`
-	BelongsTo   uint64      `json:"belongsTo,omitempty"` // legacy stored metadata only, never trusted for auth; identity is always the hashed_tokens lookup
-	IssuedAt    int64       `json:"issuedAt,omitempty"`
-	ExpiresAt   int64       `json:"expiresAt,omitempty"`
+	Key       string `json:"key,omitempty"` // for backward compatibility
+	Token     string `json:"token,omitempty"`
+	Name      string `json:"name,omitempty"`
+	Username  string `json:"username,omitempty"`
+	BelongsTo uint64 `json:"belongsTo,omitempty"` // legacy stored metadata only, never trusted for auth; identity is always the hashed_tokens lookup
+	IssuedAt  int64  `json:"issuedAt,omitempty"`
+	ExpiresAt int64  `json:"expiresAt,omitempty"`
 	// Minimal distinguishes owner-inheriting tokens from customized caps. Nil means legacy (infer from stored permissions).
 	Minimal     *bool       `json:"minimal,omitempty"`
 	Permissions Permissions `json:"Permissions,omitempty"`
@@ -112,6 +113,7 @@ type AuthToken struct {
 // MinimalAuthToken is used for tokens that only include JWT standard claims
 type MinimalAuthToken struct {
 	jwt.RegisteredClaims `swaggerignore:"true"`
+	RememberDevice       string `json:"rd,omitempty"` // Personal File Relay: signed, revocable session binding (2026-11-05).
 }
 
 type Permissions struct {

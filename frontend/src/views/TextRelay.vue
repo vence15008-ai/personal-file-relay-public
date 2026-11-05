@@ -1,13 +1,13 @@
 <template>
   <section class="relay" :class="{ 'relay-compact': true, 'relay-dragging': dragging }" aria-label="个人中转站" @dragenter="dragEnter" @dragover="dragOver" @dragleave="dragLeave" @drop="dropFiles">
-    <div class="relay-header" :class="{ 'native-header': nativeClient }" role="banner"><div class="brand"><span class="brand-icon">⇄</span><h1>中转站</h1></div><div v-if="nativeClient" class="native-window-actions"><button type="button" aria-label="热键设置" @click="nativeAction('settings')">⚙</button><button type="button" aria-label="最小化" @click="nativeAction('minimize')">−</button><button type="button" aria-label="关闭到托盘" @click="nativeAction('hide')">×</button></div><div v-else class="relay-nav"><RouterLink to="/files/Personal/" aria-label="文件管理">▤</RouterLink><button v-if="mobile" type="button" aria-label="安装到桌面" @click="install">↓</button></div></div>
+    <div class="relay-header" :class="{ 'native-header': nativeClient }" role="banner"><div class="brand"><span class="brand-icon">⇄</span><h1>中转站</h1></div><div v-if="nativeClient" class="native-window-actions"><button type="button" aria-label="热键设置" @click="nativeAction('settings')">⚙</button><button type="button" aria-label="最小化" @click="nativeAction('minimize')">−</button><button type="button" aria-label="关闭到托盘" @click="nativeAction('hide')">×</button></div><div v-else class="relay-nav"><button type="button" aria-label="登录设备" @click="devicesOpen = true">⚙</button><RouterLink to="/files/Personal/" aria-label="文件管理">▤</RouterLink><button v-if="mobile" type="button" aria-label="安装到桌面" @click="install">↓</button></div></div>
     <input ref="fileInput" type="file" multiple hidden @change="upload">
     <div class="list-header"><span>最近</span><span>{{ filtered.length }} 项</span></div>
     <div class="relay-list" aria-live="polite">
       <p v-if="!filtered.length && !loading" class="empty">暂无内容</p>
       <article v-for="item in filtered" :key="item.path" class="transfer" :class="{ 'relay-message': item.kind === 'message' }">
         <button v-if="item.kind === 'message'" type="button" class="row-main message-text" :aria-label="'复制消息：'+firstLine(item.text)" @click="copyText(item.text)"><span class="item-icon text-icon">文</span><span class="item-body"><span class="item-title">{{ firstLine(item.text) }}</span><span class="item-meta">{{ charCount(item.text).toLocaleString() }} 字符 · <time>{{ formatTime(item.time) }}</time></span></span><span class="copy-mark" aria-hidden="true">⧉</span></button>
-        <button v-else type="button" class="row-main" @click="openFile(item)"><span class="item-icon">{{ item.type === 'directory' ? '▤' : /\.(png|jpe?g|webp|gif)$/i.test(item.name) ? '▧' : '↥' }}</span><span class="item-body"><span class="item-title">{{ item.name }}</span><span class="item-meta">{{ item.type === 'directory' ? '文件夹' : formatSize(item.size) }} · <time>{{ formatTime(item.time) }}</time></span></span></button>
+        <button v-else type="button" class="row-main" :class="{ 'drag-image': canDragImage(item) }" :title="canDragImage(item) ? '按住拖到其他应用（图片文件）' : undefined" @pointerdown="imagePointerDown($event, item)" @pointermove="imagePointerMove($event, item)" @pointerup="imagePointerUp" @pointercancel="imagePointerUp" @dragstart.prevent @click="imageClick($event, item)"><span class="item-icon">{{ item.type === 'directory' ? '▤' : /\.(png|jpe?g|webp|gif)$/i.test(item.name) ? '▧' : '↥' }}</span><span class="item-body"><span class="item-title">{{ item.name }}</span><span class="item-meta">{{ item.type === 'directory' ? '文件夹' : formatSize(item.size) }} · <time>{{ formatTime(item.time) }}</time></span></span></button>
         <div v-if="item.kind === 'message'" class="row-actions message-actions"><button type="button" @click="preview = item">预览</button><button type="button" class="danger" @click="remove(item)">删除</button></div>
         <div v-else class="row-actions"><a v-if="item.type !== 'directory'" :href="getDownloadURL(source, item.path, false)" :download="item.name">下载</a><button type="button" @click="openFile(item)">{{ item.type === 'directory' ? '打开' : '预览' }}</button><button type="button" class="danger" @click="remove(item)">删除</button></div>
       </article>
@@ -15,6 +15,7 @@
     <div class="compact-actions"><button type="button" @click="fileInput?.click()">↑ 上传</button><button type="button" class="primary" :disabled="sending" @click="sendOrPaste">{{ sending ? '发送中…' : draft ? '重试发送' : '粘贴并发送' }}</button></div>
     <p v-if="error" class="relay-error" role="alert">{{ error }}</p><p v-else-if="notice" class="relay-notice" role="status">{{ notice }}</p>
     <div v-if="dragging" class="relay-drop-overlay" aria-live="polite">松开上传</div>
+    <RememberDevices v-if="devicesOpen" @close="devicesOpen = false" />
     <Teleport to="body"><div v-if="preview" class="relay-preview" role="dialog" aria-modal="true" aria-labelledby="relay-preview-title" @keydown.esc="preview = null"><div class="preview-header"><h2 id="relay-preview-title">消息预览</h2><button type="button" @click="preview = null">关闭</button></div><pre ref="previewText" class="preview-content" tabindex="0">{{ preview.text }}</pre><button type="button" class="primary" @click="copyText(preview.text)">复制全文</button></div>
     <div v-if="installHelp" class="relay-install" role="dialog" aria-modal="true" aria-label="安装到桌面"><div><p>浏览器菜单 → 安装应用 / 添加到桌面</p><button type="button" @click="installHelp = false">知道了</button></div></div></Teleport>
   </section>
@@ -27,6 +28,8 @@ import { fetchFiles, listDirectoryEntries, post, bulkDelete, moveCopy, getDownlo
 import { mutations, state } from '@/store';
 import { readRelayClipboard, clipboardImageFile } from '@/utils/relayClipboard';
 import { installAvailable, isStandalone, promptInstall } from '@/utils/pwaInstall';
+import { renew } from '@/utils/auth';
+import RememberDevices from '@/components/RememberDevices.vue';
 
 const source = 'Personal';
 const directory = '/.text-relay/';
@@ -39,9 +42,25 @@ const loading = ref(false), sending = ref(false), preview = ref(null), previewTe
 const filtered = computed(() => items.value);
 const cache = new Map();
 const dragging = ref(false);
+const devicesOpen = ref(false);
 let dragDepth = 0;
 let timer, active = true;
 let noticeTimer;
+let imagePointer = null, suppressImageClickUntil = 0;
+const canDragImage = item => nativeClient && item.type !== 'directory' && item.size <= 32 * 1024 * 1024 && /\.(png|jpe?g|gif|webp|bmp|avif|heic|heif)$/i.test(item.name);
+function imagePointerDown(event, item) {
+  if (!canDragImage(item) || event.button !== 0 || event.pointerType !== 'mouse') return;
+  imagePointer = { path: item.path, x: event.clientX, y: event.clientY };
+  event.currentTarget.setPointerCapture(event.pointerId);
+}
+function imagePointerMove(event, item) {
+  if (!imagePointer || imagePointer.path !== item.path || !(event.buttons & 1) || Math.hypot(event.clientX - imagePointer.x, event.clientY - imagePointer.y) < 5) return;
+  imagePointer = null; suppressImageClickUntil = Date.now() + 1500;
+  event.preventDefault();
+  window.chrome.webview.postMessage({ action: 'drag-image', url: getDownloadURL(source, item.path, false), name: item.name, version: String(item.modified || item.time) + ':' + item.size });
+}
+function imagePointerUp() { imagePointer = null; }
+function imageClick(event, item) { if (Date.now() < suppressImageClickUntil) { event.preventDefault(); return; } openFile(item); }
 watch(notice, value => { window.clearTimeout(noticeTimer); if (value) noticeTimer = window.setTimeout(() => { notice.value = ''; }, 2500); });
 watch(() => state.upload?.isUploading, (current, previous) => { if (previous && !current) void refresh(); });
 watch(preview, async (value) => { if (value) { await nextTick(); previewText.value?.focus(); } });
@@ -139,6 +158,10 @@ function openFull() {
 function nativeAction(action) { if (nativeClient) window.chrome.webview.postMessage({ action }); }
 function nativeCommand(event) {
   if (!nativeClient || event.data?.type !== 'personal-relay-command') return;
+  if (event.data.action === 'devices') devicesOpen.value = true;
+  if (event.data.action === 'drag-status') { notice.value = event.data.text; error.value = ''; suppressImageClickUntil = Date.now() + 500; }
+  if (event.data.action === 'drag-error') error.value = event.data.text;
+  if (event.data.action === 'drag-auth-expired') void renew().then(() => { notice.value = '登录已恢复，请再次拖动'; }).catch(failure => relayFailure(failure, '请重新登录后拖动图片'));
   if (event.data.action === 'paste-send' && typeof event.data.text === 'string' && !sending.value) {
     if (draft.value && error.value) { notice.value = '有未发送的文字，请先重试发送。'; return; }
     draft.value = event.data.text;
@@ -219,6 +242,7 @@ onBeforeUnmount(() => {
 .relay button,.relay a { transition: background-color .12s, color .12s; }
 .row-actions button:hover,.row-actions a:hover,.compact-actions button:not(.primary):hover { background: light-dark(#dce5efb3,#4b5c72b3); }
 .relay .primary:hover { filter: brightness(.96); }
+.drag-image { cursor: grab !important; touch-action: none; user-select: none; }.drag-image:active { cursor: grabbing !important; }
 .native-header { app-region: drag; -webkit-app-region: drag; margin-bottom: 9px; }.native-window-actions { display: flex; gap: 1px; app-region: no-drag; -webkit-app-region: no-drag; }.native-window-actions button { width: 24px; height: 26px; padding: 2px; background: transparent; border-radius: 6px; font-size: 15px; app-region: no-drag; -webkit-app-region: no-drag; }.native-window-actions button:hover { background: var(--soft); }
 @media (pointer: coarse) { .row-actions button,.row-actions a { height: 44px; min-height: 44px; }.transfer { height: 112px; min-height: 112px; flex-basis: 112px; }.row-actions { height: 53px; }.relay-list { height: 352px; flex-basis: 352px; }.compact-actions button { min-height: 44px; } }
 </style>

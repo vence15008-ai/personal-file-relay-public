@@ -1,3 +1,4 @@
+<!-- Modified for Personal File Relay: optional remembered-browser sign-in (2026-11-05). -->
 <template>
   <Tooltip />
   <div id="login" :class="{ recaptcha: globalVars.recaptcha, 'dark-mode': isDarkMode, 'halloween-theme': eventTheme === 'halloween' }">
@@ -43,6 +44,9 @@
               :placeholder="$t('login.passwordConfirm')" />
 
             <div v-if="globalVars.recaptcha" id="globalVars.recaptcha"></div>
+            <!-- Personal File Relay addition (2026-11-05): never preselect on shared computers. -->
+            <label v-if="!createMode && passwordAvailable" class="remember-browser"><input type="checkbox" v-model="rememberDevice"> 记住此设备 90 天（仅个人设备）</label>
+            <input v-if="rememberDevice && !createMode" class="input" v-model="deviceName" maxlength="60" placeholder="设备名称，例如 vivo 手机" aria-label="设备名称">
             <input class="button button--block" type="submit"
               :value="createMode ? $t('general.signup') : getLoginButtonValue()" />
             <p @click="toggleMode" v-if="signup" aria-label="sign up toggle">
@@ -244,6 +248,8 @@ export default {
     error: "",
     username: "",
     password: "",
+    rememberDevice: false,
+    deviceName: /Android/i.test(navigator.userAgent) ? '安卓手机' : /Windows/i.test(navigator.userAgent) ? 'Windows 电脑' : /Macintosh/i.test(navigator.userAgent) ? 'Mac 电脑' : '个人浏览器',
     recaptcha: globalVars.recaptcha,
     passwordConfirm: "",
     loginURL: `${globalVars.baseURL}api/auth/oidc/login`,
@@ -346,7 +352,7 @@ export default {
         if (this.createMode) {
           await authApi.signup(this.username, this.password);
         }
-        await authApi.login(this.username, this.password, captcha);
+        await authApi.login(this.username, this.password, captcha, '', this.rememberDevice, this.deviceName);
         await initAuth();
         void router.push({ path: redirect });
       } catch (e) {
@@ -372,6 +378,7 @@ export default {
               username: this.username,
               password: this.password,
               recaptcha: captcha,
+              rememberDevice: this.rememberDevice, deviceName: this.deviceName,
               redirect: redirect,
             },
           });
@@ -384,6 +391,7 @@ export default {
               username: this.username,
               password: this.password,
               recaptcha: captcha,
+              rememberDevice: this.rememberDevice, deviceName: this.deviceName,
               redirect: redirect,
               generate: true,
             },
@@ -396,13 +404,14 @@ export default {
               username: this.username,
               password: this.password,
               recaptcha: captcha,
+              rememberDevice: this.rememberDevice, deviceName: this.deviceName,
               redirect: redirect,
               generate: false,
             },
           });
         } else if (e.message.includes("passkey MFA is required")) {
           try {
-            await authApi.beginPasskeyLogin(this.username, this.password);
+            await authApi.beginPasskeyLogin(this.username, this.password, this.rememberDevice, this.deviceName);
             await initAuth();
             void router.push({ path: redirect });
           } catch (passkeyErr) {
@@ -423,6 +432,8 @@ export default {
 </script>
 
 <style >
+.remember-browser { display: flex; align-items: center; gap: 6px; margin: 12px 0; font-size: 13px; }
+.remember-browser input { width: auto; margin: 0; }
 
 .password-entry .input {
   margin-bottom: 0.5em;

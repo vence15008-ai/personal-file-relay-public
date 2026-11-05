@@ -6,6 +6,8 @@ vi.mock('@/api/resources',()=>mocks.api);
 vi.mock('@/store',()=>({mutations:mocks.mutations,state:{upload:{isUploading:false}}}));
 vi.mock('vue-router',()=>({useRouter:()=>({push:mocks.push}),RouterLink:{template:'<a><slot /></a>'}}));
 vi.mock('@/utils/pwaInstall',()=>({installAvailable:{value:false},isStandalone:()=>false,promptInstall:vi.fn()}));
+vi.mock('@/utils/auth',()=>({renew:vi.fn()}));
+vi.mock('@/components/RememberDevices.vue',()=>({default:{template:'<div />'}}));
 import TextRelay from './TextRelay.vue';
 const flush=async()=>{for(let i=0;i<20;i++){await Promise.resolve();await nextTick();}};
 let app,root,entries,read,copied;

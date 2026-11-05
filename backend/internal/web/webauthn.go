@@ -1,3 +1,4 @@
+// Modified for Personal File Relay: revocable 90-day browser sign-in (2026-11-05).
 package web
 
 import (
@@ -91,7 +92,8 @@ func finishPasskeyLoginHandler(w http.ResponseWriter, r *http.Request, d *Contex
 	}
 
 	d.User = user
-	status, err := printToken(w, r, d.User, "")
+	// Personal File Relay (2026-11-05): remember only after successful assertion.
+	status, err := loginTokenResponse(w, r, d.User)
 	if err != nil || status != 0 {
 		return status, err
 	}

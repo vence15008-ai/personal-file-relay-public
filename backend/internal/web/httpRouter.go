@@ -1,3 +1,4 @@
+// Modified for Personal File Relay: revocable 90-day browser sign-in (2026-11-05).
 package web
 
 import (
@@ -41,6 +42,10 @@ func configureHTTPRouter(router, api, publicRoutes, publicApi *http.ServeMux) {
 	api.HandleFunc("POST /auth/otp/generate", withOrWithoutUser(withRateLimitChain(AuthRateLimitModerate, generateOTPHandler)))
 	api.HandleFunc("POST /auth/otp/verify", withOrWithoutUser(withRateLimitChain(AuthRateLimitCredentialLockout, verifyOTPHandler)))
 	api.HandleFunc("POST /auth/renew", withUser(withRateLimitChain(AuthRateLimitAuthenticated, renewHandler)))
+	// Personal File Relay: optional, independently revocable remembered browsers (2026-11-05).
+	api.HandleFunc("POST /auth/remember/restore", withoutUser(withRateLimitChain(AuthRateLimitCredential, restoreRememberedHandler)))
+	api.HandleFunc("GET /auth/remember/devices", withUser(withRateLimitChain(AuthRateLimitAuthenticated, listRememberedHandler)))
+	api.HandleFunc("DELETE /auth/remember/devices/{id}", withUser(withRateLimitChain(AuthRateLimitAuthenticated, revokeRememberedHandler)))
 	api.HandleFunc("POST /auth/token", withUser(withRateLimitChain(AuthRateLimitAuthenticated, createApiTokenHandler)))
 	api.HandleFunc("DELETE /auth/token", withUser(withRateLimitChain(AuthRateLimitAuthenticated, deleteApiTokenHandler)))
 	api.HandleFunc("GET /auth/token/list", withUser(withRateLimitChain(AuthRateLimitAuthenticated, listApiTokensHandler)))

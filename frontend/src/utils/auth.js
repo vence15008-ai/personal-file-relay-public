@@ -16,6 +16,22 @@ const KEEP_ALIVE_INTERVAL_MS = 60 * 1000;
 let keepAliveTimer = null;
 let renewInFlight = null;
 let sessionExpiresAt = null;
+let restoreInFlight = null;
+
+// Personal File Relay (2026-11-05): HttpOnly credential restores short sessions;
+// neither this secret nor a JWT is persisted in web storage.
+export async function restoreRememberedSession() {
+  if (restoreInFlight) return restoreInFlight;
+  restoreInFlight = (async () => {
+    const res = await fetch(getApiPath('auth/remember/restore'), { method: 'POST', credentials: 'same-origin', headers: { 'X-Relay-Request': '1' } });
+    if (res.status === 401) return false;
+    if (res.status !== 200) { const error = new Error('暂时无法恢复登录，请检查网络后重试'); error.status = res.status; throw error; }
+    setSessionExpiresAtFromToken(await res.text());
+    mutations.setSession(generateRandomCode(8));
+    return true;
+  })().finally(() => { restoreInFlight = null; });
+  return restoreInFlight;
+}
 
 function decodeJwtExp(token) {
   if (!token) {
@@ -69,12 +85,16 @@ export async function validateLogin(isPublicRoute = false) {
   // Use direct fetch to avoid automatic logout on 401
   // Public routes (e.g. /public/share/...) use the public API base path
   const apiPath = getApiPath('users', { username: 'self' }, false, isPublicRoute);
-  const res = await fetch(apiPath, {
+  let res = await fetch(apiPath, {
     credentials: 'same-origin', // Ensure cookies are sent with the request
     headers: {
       "sessionId": state.sessionId,
     }
   });
+
+  if (res.status === 401 && !isPublicRoute && await restoreRememberedSession()) {
+    res = await fetch(apiPath, { credentials: 'same-origin', headers: { sessionId: state.sessionId } });
+  }
 
   if (res.status !== 200) {
     // A 401 from the non-public self check means our session is no longer valid —
@@ -131,6 +151,7 @@ export async function renew() {
     }
     const error = new Error(body);
     error.status = res.status;
+    if (res.status === 401 && await restoreRememberedSession()) return;
     if (res.status === 401 && getters.isLoggedIn()) {
       sessionExpired();
     }
@@ -213,7 +234,7 @@ export async function logout(redirectUrl) {
   try {
     const res = await fetch(getApiPath("auth/logout"), {
       method: "POST",
-      credentials: 'same-origin'
+      credentials: 'same-origin', headers: { 'X-Relay-Request': '1' }
     });
     if (res.ok) {
       const data = await res.json();

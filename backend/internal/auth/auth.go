@@ -1,3 +1,4 @@
+// Modified for Personal File Relay: revocable 90-day browser sign-in (2026-11-05).
 package auth
 
 import (
@@ -36,7 +37,8 @@ func RevokeApiToken(accessStore *access.Storage, token string) error {
 	return accessStore.RevokeToken(token)
 }
 
-func MakeSignedTokenAPI(user *users.User, name string, duration time.Duration, perms users.Permissions, minimal bool) (string, users.AuthToken, error) {
+// Modified for Personal File Relay: optional signed browser credential binding (2026-11-05).
+func MakeSignedTokenAPI(user *users.User, name string, duration time.Duration, perms users.Permissions, minimal bool, rememberedDevice ...string) (string, users.AuthToken, error) {
 	if _, ok := user.Tokens[name]; ok {
 		return "", users.AuthToken{}, fmt.Errorf("key already exists with same name %v ", name)
 	}
@@ -58,6 +60,9 @@ func MakeSignedTokenAPI(user *users.User, name string, duration time.Duration, p
 		},
 	}
 	claim.Minimal = &minimal
+	if len(rememberedDevice) > 0 {
+		claim.RememberDevice = rememberedDevice[0]
+	}
 	if !minimal {
 		claim.Permissions = users.SanitizeTokenPermissions(perms)
 	}

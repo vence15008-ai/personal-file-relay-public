@@ -1,9 +1,9 @@
 // Modified for Personal File Relay: protected API session-loss regression tests (2026-11-05).
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { expired, loggedIn } = vi.hoisted(() => ({ expired: vi.fn(), loggedIn: vi.fn(() => true) }));
+const { expired, loggedIn, restore } = vi.hoisted(() => ({ expired: vi.fn(), loggedIn: vi.fn(() => true), restore: vi.fn(async () => false) }));
 vi.mock('@/store', () => ({ state: { sessionId: 'test-session' }, getters: { isLoggedIn: loggedIn } }));
-vi.mock('@/utils/auth', () => ({ sessionExpired: expired }));
+vi.mock('@/utils/auth', () => ({ sessionExpired: expired, restoreRememberedSession: restore }));
 
 vi.mock('@/utils/constants', () => {
   return {
@@ -43,6 +43,7 @@ describe('protected API authentication failure', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     loggedIn.mockReturnValue(true);
+    restore.mockResolvedValue(false);
     vi.stubGlobal('location', { origin: 'https://relay.example.test', href: 'https://relay.example.test/chat' });
   });
   afterEach(() => vi.unstubAllGlobals());
@@ -70,6 +71,17 @@ describe('protected API authentication failure', () => {
     respond(500);
     await expect(fetchURL('/api/resources')).rejects.toMatchObject({ status: 500 });
     expect(expired).not.toHaveBeenCalled();
+  });
+  it('restores once and retries the identical protected request', async () => {
+    restore.mockResolvedValue(true);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ status: 401, text: async () => 'expired' }).mockResolvedValueOnce({ status: 200 }));
+    await expect(fetchURL('/api/resources', { method: 'POST', body: 'synthetic' })).resolves.toMatchObject({ status: 200 });
+    expect(restore).toHaveBeenCalledOnce(); expect(fetch).toHaveBeenCalledTimes(2); expect(expired).not.toHaveBeenCalled();
+    expect(fetch.mock.calls[1][1]).toMatchObject({ method: 'POST', body: 'synthetic' });
+  });
+  it('does not erase a remembered browser when restoration is temporarily unavailable', async () => {
+    respond(401); restore.mockRejectedValue(Object.assign(new Error('outage'), { status: 500 }));
+    await expect(fetchURL('/api/resources')).rejects.toMatchObject({ status: 500 }); expect(expired).not.toHaveBeenCalled();
   });
 });
 
