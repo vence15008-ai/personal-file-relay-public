@@ -1,3 +1,4 @@
+// Modified for Personal File Relay: enforce preview pixel bounds, including old cached images (2026-11-06).
 package preview
 
 import (
@@ -206,6 +207,13 @@ func GetPreviewForFile(ctx context.Context, file iteminfo.ExtendedFileInfo, prev
 		if len(data) < minPreviewSize {
 			return nil, ErrPreviewTooSmall
 		}
+		// Earlier versions cached small compressed files at their original pixel size.
+		// Regenerate only an oversized image entry; other cached previews stay valid.
+		if strings.HasPrefix(file.Type, "image") && previewSize != "original" {
+			if cfg, _, err := image.DecodeConfig(bytes.NewReader(data)); err == nil && !ImageFitsPreviewSize(cfg.Width, cfg.Height, previewSize) {
+				return GeneratePreviewWithMD5(ctx, file, previewSize, url, seekPercentage, cacheHash)
+			}
+		}
 		return data, nil
 	}
 	return GeneratePreviewWithMD5(ctx, file, previewSize, url, seekPercentage, cacheHash)
@@ -348,8 +356,7 @@ func (s *Service) generateVideoPreviewBytes(ctx context.Context, file iteminfo.E
 
 // generateImagePreview generates preview for regular image files
 func (s *Service) generateImagePreview(ctx context.Context, file iteminfo.ExtendedFileInfo, previewSize string) ([]byte, error) {
-	const maxSizeForOriginal = 256 * 1024 // 256KB
-	if previewSize != "original" && (file.Size < maxSizeForOriginal || ShouldServeOriginalImage(file.RealPath, previewSize)) {
+	if previewSize != "original" && ShouldServeOriginalImage(file.RealPath, previewSize) {
 		if original, err := os.ReadFile(file.RealPath); err == nil {
 			return original, nil
 		}

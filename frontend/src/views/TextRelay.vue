@@ -16,6 +16,7 @@
     <p v-if="error" class="relay-error" role="alert">{{ error }}</p><p v-else-if="notice" class="relay-notice" role="status">{{ notice }}</p>
     <div v-if="dragging" class="relay-drop-overlay" aria-live="polite">松开上传</div>
     <RememberDevices v-if="devicesOpen" @close="devicesOpen = false" />
+    <RelayImagePreview v-if="imagePreview" :source="source" :item="imagePreview" @close="imagePreview = null" />
     <Teleport to="body"><div v-if="preview" class="relay-preview" role="dialog" aria-modal="true" aria-labelledby="relay-preview-title" @keydown.esc="preview = null"><div class="preview-header"><h2 id="relay-preview-title">消息预览</h2><button type="button" @click="preview = null">关闭</button></div><pre ref="previewText" class="preview-content" tabindex="0">{{ preview.text }}</pre><button type="button" class="primary" @click="copyText(preview.text)">复制全文</button></div>
     <div v-if="installHelp" class="relay-install" role="dialog" aria-modal="true" aria-label="安装到桌面"><div><p>浏览器菜单 → 安装应用 / 添加到桌面</p><button type="button" @click="installHelp = false">知道了</button></div></div></Teleport>
   </section>
@@ -30,6 +31,8 @@ import { readRelayClipboard, clipboardImageFile } from '@/utils/relayClipboard';
 import { installAvailable, isStandalone, promptInstall } from '@/utils/pwaInstall';
 import { renew } from '@/utils/auth';
 import RememberDevices from '@/components/RememberDevices.vue';
+import RelayImagePreview from '@/components/RelayImagePreview.vue';
+import { isRelayImage } from '@/utils/relayImagePreview';
 
 const source = 'Personal';
 const directory = '/.text-relay/';
@@ -43,6 +46,7 @@ const filtered = computed(() => items.value);
 const cache = new Map();
 const dragging = ref(false);
 const devicesOpen = ref(false);
+const imagePreview = ref(null);
 let dragDepth = 0;
 let timer, active = true;
 let noticeTimer;
@@ -187,7 +191,7 @@ async function pasteEvent(event) {
   if (draft.value && error.value) { notice.value = '请先重试未发送的文字。'; return; }
   draft.value = text; await sendOrPaste();
 }
-function openFile(item) { void router.push('/files/Personal/' + item.path.split('/').filter(Boolean).map(encodeURIComponent).join('/') + (item.type === 'directory' ? '/' : '')); }
+function openFile(item) { if (isRelayImage(item)) { imagePreview.value = item; return; } void router.push('/files/Personal/' + item.path.split('/').filter(Boolean).map(encodeURIComponent).join('/') + (item.type === 'directory' ? '/' : '')); }
 async function remove(item) {
   if (!window.confirm(`永久删除${item.kind === 'message' ? '这条消息' : '「' + item.name + '」'}？此操作无法撤销。`)) return;
   try { await bulkDelete([{ source, path: item.path }]); cache.delete(item.name); notice.value = '已删除'; await refresh(); }
@@ -212,7 +216,7 @@ onMounted(() => {
   document.documentElement.classList.toggle('relay-native-page', nativeClient);
   window.chrome?.webview?.addEventListener('message', nativeCommand);
   document.addEventListener('paste', pasteEvent);
-  void refresh(); timer = window.setInterval(refresh, 5000);
+  void refresh(); timer = window.setInterval(() => { if (!imagePreview.value && !preview.value && document.visibilityState !== 'hidden') void refresh(); }, 5000);
 });
 onBeforeUnmount(() => {
   active = false; window.clearInterval(timer);

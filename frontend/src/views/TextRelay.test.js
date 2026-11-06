@@ -8,6 +8,8 @@ vi.mock('vue-router',()=>({useRouter:()=>({push:mocks.push}),RouterLink:{templat
 vi.mock('@/utils/pwaInstall',()=>({installAvailable:{value:false},isStandalone:()=>false,promptInstall:vi.fn()}));
 vi.mock('@/utils/auth',()=>({renew:vi.fn()}));
 vi.mock('@/components/RememberDevices.vue',()=>({default:{template:'<div />'}}));
+vi.mock('@/components/RelayImagePreview.vue',()=>({default:{props:['item'],template:'<div class="test-image-preview">{{item.name}}</div>'}}));
+vi.mock('@/api/utils',()=>({fetchURL:vi.fn()}));
 import TextRelay from './TextRelay.vue';
 const flush=async()=>{for(let i=0;i<20;i++){await Promise.resolve();await nextTick();}};
 let app,root,entries,read,copied;
@@ -28,6 +30,12 @@ beforeEach(()=>{
 afterEach(()=>{app.unmount();root.remove();vi.restoreAllMocks();});
 const paste=()=>[...root.querySelectorAll('.compact-actions button')].find(b=>/粘贴|重试/.test(b.textContent)).click();
 describe('minimal relay',()=>{
+ it('opens an image in the lightweight dialog without entering full file management',async()=>{
+  app.unmount();
+  mocks.api.fetchFiles.mockImplementation(async(_source,path)=>path==='/'?{source:'Personal',path:'/',items:[{...file,name:'图片 & test.png',path:'/图片 & test.png',type:'image/png'}]}:{content:'synthetic message'});
+  app=createApp(TextRelay);app.mount(root);
+  await flush();root.querySelector('.transfer:not(.relay-message) .row-actions button').click();await flush();expect(root.querySelector('.test-image-preview').textContent).toContain('图片 & test.png');expect(mocks.push).not.toHaveBeenCalled();expect(window.location.pathname).toBe('/chat');
+ });
  it('does not create a folder or upload after authentication is lost, and clears stale items',async()=>{
   await flush();expect(root.querySelector('.message-text')).not.toBeNull();
   mocks.api.fetchFiles.mockRejectedValue(Object.assign(new Error('no token'),{status:401}));

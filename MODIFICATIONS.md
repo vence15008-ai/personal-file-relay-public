@@ -42,3 +42,10 @@ The public client package uses generic host-address examples and includes this m
 - Added `frontend/src/components/RememberDevices.vue` and state/web remembered-device modules and security tests: per-user listing and individual revocation. Explicit logout forgets the current browser. No anonymous API/file access was added.
 - Updated the Windows client and unified relay: image rows can initiate native Windows FileDrop using a deliberately downloaded file. Dedicated local cache is limited to 256 MiB with 32 MiB per image and timed cleanup. File preparation and cache integrity are tested; cross-application drop compatibility requires real target-app acceptance.
 - Updated client documentation. Production and test profiles remain separate; real user credentials, runtime databases and personal host addresses are excluded from publication.
+
+## 2026-11-06: lightweight image preview
+
+- Changed upstream `backend/internal/web/preview.go` and `backend/internal/preview/preview.go`: original-image shortcuts now check actual pixel dimensions, including highly compressed large images. Oversized image entries produced by the older preview cache are regenerated on demand; unrelated cached content is retained.
+- Added `frontend/src/components/RelayImagePreview.vue`, `utils/relayImagePreview.js` and regression tests: one authenticated bounded image request, explicit original loading, cancel/release on close, timeout and readable failure/retry states. The relay keeps its route and pauses listing polls while previewing.
+- Added synthetic image-bound and old-cache regression tests; updated existing preview tests and relay interaction tests. Original uploaded/downloaded bytes are unchanged.
+- Browser and Windows WebView2 checks use isolated accounts and synthetic files. Actual remote-PC rendering of the user's failing file remains a separate acceptance item; no private image was accessed for these tests.

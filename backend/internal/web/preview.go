@@ -1,3 +1,4 @@
+// Modified for Personal File Relay: bound previews by pixel dimensions, not compressed file size (2026-11-06).
 package web
 
 import (
@@ -131,8 +132,7 @@ func shouldServeOriginalPreview(ext string, resizable bool, realPath, previewSiz
 	case ".heic", ".heif", ".tiff", ".tif":
 		return false
 	}
-	const maxSizeForOriginal = 256 * 1024 // 256KB
-	if settings.Config.Server.DisableResize || fileSize < maxSizeForOriginal {
+	if settings.Config.Server.DisableResize {
 		return true
 	}
 	return preview.ShouldServeOriginalImage(realPath, previewSize)
