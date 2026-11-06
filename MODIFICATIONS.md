@@ -49,3 +49,9 @@ The public client package uses generic host-address examples and includes this m
 - Added `frontend/src/components/RelayImagePreview.vue`, `utils/relayImagePreview.js` and regression tests: one authenticated bounded image request, explicit original loading, cancel/release on close, timeout and readable failure/retry states. The relay keeps its route and pauses listing polls while previewing.
 - Added synthetic image-bound and old-cache regression tests; updated existing preview tests and relay interaction tests. Original uploaded/downloaded bytes are unchanged.
 - Browser and Windows WebView2 checks use isolated accounts and synthetic files. Actual remote-PC rendering of the user's failing file remains a separate acceptance item; no private image was accessed for these tests.
+
+## 2026-11-06: old-client compatibility and scoped start recovery
+
+- Added an explicit capabilities exchange to the relay and Windows bridge. Native image drag is enabled only after the host advertises support; older clients retain ordinary image-row preview.
+- Updated `deploy/windows/start.ps1` to verify the existing task belongs to the current installation and retry a stopped, unlaunched relay task through the Task Scheduler API. Saved privileges, startup triggers and power settings are unchanged.
+- Added dated compatibility validation. Preview works in both the older public client and current client; cross-application drag delivery remains a manual acceptance item.

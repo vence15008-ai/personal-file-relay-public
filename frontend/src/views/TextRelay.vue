@@ -51,7 +51,8 @@ let dragDepth = 0;
 let timer, active = true;
 let noticeTimer;
 let imagePointer = null, suppressImageClickUntil = 0;
-const canDragImage = item => nativeClient && item.type !== 'directory' && item.size <= 32 * 1024 * 1024 && /\.(png|jpe?g|gif|webp|bmp|avif|heic|heif)$/i.test(item.name);
+const nativeDragAvailable = ref(false);
+const canDragImage = item => nativeClient && nativeDragAvailable.value && item.type !== 'directory' && item.size <= 32 * 1024 * 1024 && /\.(png|jpe?g|gif|webp|bmp|avif|heic|heif)$/i.test(item.name);
 function imagePointerDown(event, item) {
   if (!canDragImage(item) || event.button !== 0 || event.pointerType !== 'mouse') return;
   imagePointer = { path: item.path, x: event.clientX, y: event.clientY };
@@ -162,6 +163,7 @@ function openFull() {
 function nativeAction(action) { if (nativeClient) window.chrome.webview.postMessage({ action }); }
 function nativeCommand(event) {
   if (!nativeClient || event.data?.type !== 'personal-relay-command') return;
+  if (event.data.action === 'capabilities') nativeDragAvailable.value = Array.isArray(event.data.features) && event.data.features.includes('drag-image');
   if (event.data.action === 'devices') devicesOpen.value = true;
   if (event.data.action === 'drag-status') { notice.value = event.data.text; error.value = ''; suppressImageClickUntil = Date.now() + 500; }
   if (event.data.action === 'drag-error') error.value = event.data.text;
@@ -215,6 +217,7 @@ onMounted(() => {
   document.documentElement.classList.toggle('relay-compact-page', compact);
   document.documentElement.classList.toggle('relay-native-page', nativeClient);
   window.chrome?.webview?.addEventListener('message', nativeCommand);
+  nativeAction('capabilities');
   document.addEventListener('paste', pasteEvent);
   void refresh(); timer = window.setInterval(() => { if (!imagePreview.value && !preview.value && document.visibilityState !== 'hidden') void refresh(); }, 5000);
 });

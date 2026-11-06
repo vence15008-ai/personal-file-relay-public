@@ -221,6 +221,7 @@ namespace PersonalRelay {
                         var message = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(e.WebMessageAsJson);
                         object action;
                         if (!message.TryGetValue("action", out action)) return;
+                        if ((string)action == "capabilities") web.CoreWebView2.PostWebMessageAsJson("{\"type\":\"personal-relay-command\",\"action\":\"capabilities\",\"features\":[\"drag-image\"]}");
                         if ((string)action == "open-full") OpenBrowser("/chat");
                         if ((string)action == "settings") BeginInvoke(new Action(ShowSettings));
                         if ((string)action == "minimize") BeginInvoke(new Action(delegate { WindowState = FormWindowState.Minimized; }));
